@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Whisper Live - Audio</title>
+</head>
+
+<body>
+
+  <audio id="audioElement" controls>
+    <source src="jfk.flac" type="audio/flac">
+    Your browser does not support the audio element.
+  </audio>
+
+  <div>
+    <textarea id="text" rows="30" cols="150"></textarea>
+  </div>
+
+  <div>
+    <button id="start" onclick="start_record()">Start</button>
+    <button id="stop" onclick="stop_record()">Stop</button>
+  </div>
+
+  <script src="common.js"></script>
+  <script src="audio.js"></script>
+</body>
+
+</html>
