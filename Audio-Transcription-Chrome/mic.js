@@ -1,190 +1,14 @@
-/**
- * Removes a tab with the specified tab ID in Google Chrome.
- * @param {number} tabId - The ID of the tab to be removed.
- * @returns {Promise<void>} A promise that resolves when the tab is successfully removed or fails to remove.
- */
-function removeChromeTab(tabId) {
-    return new Promise((resolve) => {
-        chrome.tabs.remove(tabId).then(resolve).catch(resolve);
-    });
-}
-
-/**
- * Executes a script file in a specific tab in Google Chrome.
- * @param {number} tabId - The ID of the tab where the script should be executed.
- * @param {string} file - The file path or URL of the script to be executed.
- * @returns {Promise<void>} A promise that resolves when the script is successfully executed or fails to execute.
- */
-function executeScriptInTab(tabId, file) {
-    return new Promise((resolve) => {
-        chrome.scripting.executeScript(
-            {
-                target: { tabId },
-                files: [file],
-            },
-            () => {
-                resolve();
-            }
-        );
-    });
-}
-
-/**
- * Opens the options page of the Chrome extension in a new pinned tab.
- * @returns {Promise<chrome.tabs.Tab>} A promise that resolves with the created tab object.
- */
-function openExtensionOptions() {
-    return new Promise((resolve) => {
-        chrome.tabs.create(
-            {
-                pinned: true,
-                active: false,
-                url: `chrome-extension://${chrome.runtime.id}/options.html`,
-            },
-            (tab) => {
-                resolve(tab);
-            }
-        );
-    });
-}
-
-/**
- * Retrieves the value associated with the specified key from the local storage in Google Chrome.
- * @param {string} key - The key of the value to retrieve from the local storage.
- * @returns {Promise<any>} A promise that resolves with the retrieved value from the local storage.
- */
-function getLocalStorageValue(key) {
-    return new Promise((resolve) => {
-        chrome.storage.local.get([key], (result) => {
-            resolve(result[key]);
-        });
-    });
-}
-
-/**
- * Sends a message to a specific tab in Google Chrome.
- * @param {number} tabId - The ID of the tab to send the message to.
- * @param {any} data - The data to be sent as the message.
- * @returns {Promise<any>} A promise that resolves with the response from the tab.
- */
-function sendMessageToTab(tabId, data) {
-    return new Promise((resolve) => {
-        chrome.tabs.sendMessage(tabId, data, (response) => {
-            resolve(response);
-        });
-    });
-}
-
-/**
- * Delays the execution for a specified duration.
- * @param {number} ms - The duration to sleep in milliseconds (default: 0).
- * @returns {Promise<void>} A promise that resolves after the specified duration.
- */
-function delayExecution(ms = 0) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Sets a value associated with the specified key in the local storage of Google Chrome.
- * @param {string} key - The key to set in the local storage.
- * @param {any} value - The value to associate with the key in the local storage.
- * @returns {Promise<any>} A promise that resolves with the value that was set in the local storage.
- */
-function setLocalStorageValue(key, value) {
-    return new Promise((resolve) => {
-        chrome.storage.local.set(
-            {
-                [key]: value,
-            },
-            () => {
-                resolve(value);
-            }
-        );
-    });
-}
-
-/**
- * Retrieves the tab object with the specified tabId.
- * @param {number} tabId - The ID of the tab to retrieve.
- * @returns {Promise<object>} - A Promise that resolves to the tab object.
- */
-async function getTab(tabId) {
-    return new Promise((resolve) => {
-        chrome.tabs.get(tabId, (tab) => {
-            resolve(tab);
-        });
-    });
-}
-
-/**
- * Starts the capture process for the specified tab.
- * @param {number} tabId - The ID of the tab to start capturing.
- * @returns {Promise<void>} - A Promise that resolves when the capture process is started successfully.
- */
-async function startCapture(options) {
-    const { tabId } = options;
-    const optionTabId = await getLocalStorageValue('optionTabId');
-    if (optionTabId) {
-        await removeChromeTab(optionTabId);
-    }
-
-    try {
-        const currentTab = await getTab(tabId);
-        if (currentTab.audible) {
-            await setLocalStorageValue('currentTabId', currentTab.id);
-            await executeScriptInTab(currentTab.id, 'content.js');
-            await delayExecution(500);
-
-            const optionTab = await openExtensionOptions();
-
-            await setLocalStorageValue('optionTabId', optionTab.id);
-            await delayExecution(500);
-
-            await sendMessageToTab(optionTab.id, {
-                type: 'start_capture',
-                data: {
-                    currentTabId: currentTab.id,
-                    host: options.host,
-                    port: options.port,
-                    multilingual: options.useMultilingual,
-                    language: options.language,
-                    task: options.task,
-                    modelSize: options.modelSize,
-                    useVad: options.useVad,
-                },
-            });
-        } else {
-            console.log('No Audio');
-        }
-    } catch (error) {
-        console.error('Error occurred while starting capture:', error);
-    }
-}
-
-/**
- * Stops the capture process and performs cleanup.
- * @returns {Promise<void>} - A Promise that resolves when the capture process is stopped successfully.
- */
-async function stopCapture() {
-    const optionTabId = await getLocalStorageValue('optionTabId');
-    const currentTabId = await getLocalStorageValue('currentTabId');
-
-    if (optionTabId) {
-        res = await sendMessageToTab(currentTabId, {
-            type: 'STOP',
-            data: { currentTabId: currentTabId },
-        });
-        await removeChromeTab(optionTabId);
-    }
-}
+const host = 'localhost';
+const port = '9090';
+const language = 'en';
+const modelSize = 'large_v3';
 
 /**
  * Captures audio from the active tab in Google Chrome.
  * @returns {Promise<MediaStream>} A promise that resolves with the captured audio stream.
  */
-async function captureTabAudio() {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    return stream;
+async function captureMicAudio() {
+    return await navigator.mediaDevices.getUserMedia({ audio: true });
 }
 
 /**
@@ -234,17 +58,16 @@ function generateUUID() {
 var socket = null;
 var stream = null;
 var isServerReady = false;
-var all_text_dict = {};
+var all_segments = {};
 
 /**
  * Starts recording audio from the captured tab.
  * @param {Object} option - The options object containing the currentTabId.
  */
 async function startRecord(option) {
-    stream = await captureTabAudio();
+    stream = await captureMicAudio();
     const uuid = generateUUID();
-    console.log(uuid);
-    console.log(option);
+    console.log('options', option);
 
     if (stream) {
         // call when the stream inactive
@@ -274,7 +97,7 @@ async function startRecord(option) {
             console.log(data);
 
             if (data['uid'] !== uuid) {
-                console.log('uid not match');
+                console.error('uid not match');
                 return;
             }
 
@@ -316,25 +139,24 @@ async function startRecord(option) {
                 return;
             }
 
-            // console.log();
+            const segments = data['segments'];
+            console.log(segments);
 
-            // let message = JSON.parse(event.data);
-            const message = data['segments'];
+            {
+                const start = Number(segments[0].start);
+                const entries = Object.entries(all_segments).filter((x) => Number(x[0]) < start);
+                all_segments = Object.fromEntries(entries);
+            }
 
-            message.forEach((msg) => {
-                console.log(Number(msg.start), msg.text);
-                all_text_dict[Number(msg.start)] = msg.text.trim();
+            segments.forEach((seg) => {
+                all_segments[seg.start] = seg.text.trim();
             });
 
-            let arr = Object.entries(all_text_dict);
-            arr = arr.sort((a, b) => a[0] - b[0]);
+            const entries = Object.entries(all_segments);
+            entries.sort((a, b) => Number(a[0]) - Number(b[0]));
 
-            let text = '';
-            arr.forEach((x) => {
-                text += x[1] + '\n';
-            });
-
-            console.log(arr);
+            const text = entries.map((x) => x[1]).join('\n');
+            console.log(entries);
 
             document.getElementById('text').value = text;
         };
@@ -371,15 +193,15 @@ document.getElementById('stop').disabled = true;
 function start_record() {
     console.log('start recording');
 
-    all_text_dict = {};
+    all_segments = {};
     document.getElementById('text').value = '';
 
     startRecord({
-        host: 'localhost',
-        port: '9090',
-        language: 'zh',
+        host: host,
+        port: port,
+        language: language,
         task: 'transcribe',
-        model: 'small',
+        modelSize: modelSize,
         useVAad: false,
     });
 
@@ -399,7 +221,7 @@ function stop_record() {
     }
 
     if (stream) {
-        console.log('stop audio');
+        console.log('stop audio streaming');
         stream.getAudioTracks().forEach((track) => track.stop());
         stream = null;
     }
