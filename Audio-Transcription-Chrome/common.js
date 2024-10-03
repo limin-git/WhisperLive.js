@@ -1,7 +1,8 @@
-// const host = 'localhost';
-const host = '192.168.10.198';
+const host = '127.0.0.1';
+// const host = '192.168.10.198';
 const port = '9090';
-const language = 'en';
+const language = 'zh';
+const task = 'transcribe';
 const modelSize = 'large-v3';
 
 var socket = null;
@@ -80,7 +81,7 @@ async function startRecord(option) {
                     uid: uuid,
                     language: option.language,
                     task: option.task,
-                    model: option.modelSize,
+                    // model: option.modelSize,
                     use_vad: option.useVad,
                 })
             );
@@ -153,13 +154,17 @@ async function startRecord(option) {
             const text = entries.map((x) => x[1]).join('\n');
             console.log(entries);
 
-            document.getElementById('text').value = text;
+            const textarea = document.getElementById('text');
+            textarea.value = text + '\n';
+            textarea.scrollTop = textarea.scrollHeight;
         };
 
         const context = new AudioContext();
         const mediaStream = context.createMediaStreamSource(stream);
-        const recorder = context.createScriptProcessor(4096, 1, 1);
-        // const recorder = context.createScriptProcessor(0, 1, 1);
+
+        // 256, 512, 1024, 2048, 4096, 8192, 16384
+        // const recorder = context.createScriptProcessor(4096, 1, 1);
+        const recorder = context.createScriptProcessor(16384, 1, 1);
 
         recorder.onaudioprocess = async (event) => {
             if (!context || !isServerReady) return;
@@ -194,8 +199,8 @@ function start_record() {
         host: host,
         port: port,
         language: language,
-        task: 'transcribe',
-        modelSize: modelSize,
+        task: task,
+        // modelSize: modelSize,
         useVAad: false,
     });
 
