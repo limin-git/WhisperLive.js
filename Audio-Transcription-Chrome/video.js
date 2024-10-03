@@ -1,10 +1,10 @@
-const audioElement = document.getElementById('videoElement');
+const videoElement = document.getElementById('videoElement');
 const audioContext = new window.AudioContext();
-const audioSource = audioContext.createMediaElementSource(audioElement);
+const videoSource = audioContext.createMediaElementSource(videoElement);
 const destinationNode = audioContext.createMediaStreamDestination();
-audioSource.connect(destinationNode);
+videoSource.connect(destinationNode);
 
-async function captureMicAudio() {
+async function captureAudio() {
     stop_stream_on_close = false;
     return destinationNode.stream;
 }

@@ -58,7 +58,7 @@ function generateUUID() {
  * @param {Object} option - The options object containing the currentTabId.
  */
 async function startRecord(option) {
-    stream = await captureMicAudio();
+    stream = await captureAudio();
     const uuid = generateUUID();
     console.log('options', option);
 
