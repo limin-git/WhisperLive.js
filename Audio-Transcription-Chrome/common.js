@@ -1,4 +1,5 @@
-const host = 'localhost';
+// const host = 'localhost';
+const host = '192.168.10.198';
 const port = '9090';
 const language = 'en';
 const modelSize = 'large-v3';
@@ -8,6 +9,7 @@ var stream = null;
 var isServerReady = false;
 var all_segments = {};
 var stop_stream_on_close = true;
+var is_microphone = false;
 
 /**
  * Resamples the audio data to a target sample rate of 16kHz.
@@ -114,10 +116,10 @@ async function startRecord(option) {
 
                 // send message to popup.js to update dropdown
                 // console.log(language);
-                chrome.runtime.sendMessage({
-                    action: 'updateSelectedLanguage',
-                    detectedLanguage: language,
-                });
+                // chrome.runtime.sendMessage({
+                //     action: 'updateSelectedLanguage',
+                //     detectedLanguage: language,
+                // });
 
                 return;
             }
@@ -154,27 +156,26 @@ async function startRecord(option) {
             document.getElementById('text').value = text;
         };
 
-        const audioDataCache = [];
         const context = new AudioContext();
         const mediaStream = context.createMediaStreamSource(stream);
         const recorder = context.createScriptProcessor(4096, 1, 1);
+        // const recorder = context.createScriptProcessor(0, 1, 1);
 
         recorder.onaudioprocess = async (event) => {
             if (!context || !isServerReady) return;
 
             const inputData = event.inputBuffer.getChannelData(0);
             const audioData16kHz = resampleTo16kHZ(inputData, context.sampleRate);
-
-            audioDataCache.push(inputData);
-
             socket.send(audioData16kHz);
         };
 
         // Prevent page mute
         mediaStream.connect(recorder);
         recorder.connect(context.destination);
-        mediaStream.connect(context.destination);
-        // }
+
+        if (is_microphone == false) {
+            mediaStream.connect(context.destination);
+        }
     } else {
         window.close();
     }
