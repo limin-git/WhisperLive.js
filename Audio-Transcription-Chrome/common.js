@@ -1,7 +1,7 @@
 const host = 'localhost';
 const port = '9090';
 const language = 'en';
-const modelSize = 'large_v3';
+const modelSize = 'large-v3';
 
 var socket = null;
 var stream = null;
