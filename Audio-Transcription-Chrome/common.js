@@ -2,8 +2,9 @@
 // const host = '127.0.0.1';
 const host = '192.168.10.198';
 const port = '9090';
-const language = 'en'; // zh, Malay: ms, Tamil: ta
-const task = 'transcribe'; // transcribe, translate
+
+var language = 'en'; // zh, Malay: ms, Tamil: ta
+var task = 'transcribe'; // transcribe, translate
 
 var socket = null;
 var stream = null;
