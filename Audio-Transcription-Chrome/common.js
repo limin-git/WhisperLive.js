@@ -1,9 +1,10 @@
-const host = '127.0.0.1';
-// const host = '192.168.10.198';
+// const host = 'localhost';
+// const host = '127.0.0.1';
+const host = '192.168.10.198';
 const port = '9090';
-const language = 'zh';
-const task = 'transcribe';
-const modelSize = 'large-v3';
+
+var language = 'en'; // zh, Malay: ms, Tamil: ta
+var task = 'transcribe'; // transcribe, translate
 
 var socket = null;
 var stream = null;
@@ -81,7 +82,6 @@ async function startRecord(option) {
                     uid: uuid,
                     language: option.language,
                     task: option.task,
-                    // model: option.modelSize,
                     use_vad: option.useVad,
                 })
             );
@@ -200,7 +200,6 @@ function start_record() {
         port: port,
         language: language,
         task: task,
-        // modelSize: modelSize,
         useVAad: false,
     });
 
