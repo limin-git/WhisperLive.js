@@ -2,27 +2,49 @@
 <html>
 
 <head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
   <title>Whisper Live - Audio</title>
 </head>
 
 <body>
+  <center>
+    <audio id="audioElement" controls>
+      <source src="jfk.flac" type="audio/flac">
+      Your browser does not support the audio element.
+    </audio>
 
-  <audio id="audioElement" controls>
-    <source src="jfk.flac" type="audio/flac">
-    Your browser does not support the audio element.
-  </audio>
+    <div>
+      <textarea id="text" rows="15" cols="160"></textarea>
+    </div>
 
-  <div>
-    <textarea id="text" rows="15" cols="160"></textarea>
-  </div>
+    <div>
+      <button id="start" onclick="start_record()">Start</button>
+      <button id="stop" onclick="stop_record()">Stop</button>
+    </div>
+  </center>
 
-  <div>
-    <button id="start" onclick="start_record()">Start</button>
-    <button id="stop" onclick="stop_record()">Stop</button>
-  </div>
+  <script type="module" src="common.js"></script>
+  <script type="module">
+    import { WhisperLiveClient } from "./common.js";
+    const text_element = document.getElementById('text');
+    const start_button = document.getElementById('start');
+    const stop_button = document.getElementById('stop');
+    const audio_element = document.getElementById('audioElement');
 
-  <script src="common.js"></script>
-  <script src="audio.js"></script>
+    audio_element.loop = false;
+
+    const client = new WhisperLiveClient({
+      language: 'en',
+      audio_element: audio_element,
+      text_element: text_element,
+      start_button: start_button,
+      stop_button: stop_button,
+    });
+
+    audio_element.addEventListener('ended', () => {
+      client.stop();
+    }, false);
+  </script>
 </body>
 
 </html>

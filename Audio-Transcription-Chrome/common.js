@@ -1,230 +1,256 @@
-const host = 'localhost';
-// const host = '127.0.0.1';
-// const host = '192.168.10.198';
-const port = '9090';
+// const default_url = 'ws://127.0.0.1:9090';
+// const default_url = 'ws://192.168.10.198:9090';
+// const default_url = 'ws://192.168.10.233:9090';
+const default_url = 'ws://192.168.11.74:9090';
 
-var language = 'en'; // zh, Malay: ms, Tamil: ta
-var task = 'transcribe'; // transcribe, translate
+const default_language = 'zh'; // zh, Malay: ms, Tamil: ta
+const default_task = 'transcribe'; // transcribe, translate
 
-var socket = null;
-var stream = null;
-var isServerReady = false;
-var all_segments = {};
-var stop_stream_on_close = true;
-var is_microphone = false;
+class WhisperLiveClient {
+    constructor({ url = default_url, language = default_language, task = default_task, gain_value = 1, is_microphone = false, start_button = null, stop_button = null, text_element = null, audio_element = null, sample_rate = 16000 }) {
+        this.url = url;
+        this.language = language;
+        this.task = task;
+        this.is_microphone = is_microphone;
+        this.sample_rate = sample_rate;
+        this.audio_element = audio_element;
+        this.gain_value = gain_value;
+        this.text_element = text_element;
+        this.start_button = start_button;
+        this.stop_button = stop_button;
 
-/**
- * Resamples the audio data to a target sample rate of 16kHz.
- * @param {Array|ArrayBuffer|TypedArray} audioData - The input audio data.
- * @param {number} [origSampleRate=44100] - The original sample rate of the audio data.
- * @returns {Float32Array} The resampled audio data at 16kHz.
- */
-function resampleTo16kHZ(audioData, origSampleRate = 44100) {
-    // Convert the audio data to a Float32Array
-    const data = new Float32Array(audioData);
+        this.server_ready = false;
+        this.context = null;
+        this.segments = [];
+        this.source = null;
+        this.ws = null;
+        this.processor_node = null;
+        this.gain_node = null;
 
-    // Calculate the desired length of the resampled data
-    const targetLength = Math.round(data.length * (16000 / origSampleRate));
+        if (this.start_button && this.stop_button) {
+            this.start_button.addEventListener('click', () => {
+                this.start();
+            });
 
-    // Create a new Float32Array for the resampled data
-    const resampledData = new Float32Array(targetLength);
+            this.stop_button.addEventListener('click', () => {
+                this.stop();
+            });
+        }
 
-    // Calculate the spring factor and initialize the first and last values
-    const springFactor = (data.length - 1) / (targetLength - 1);
-    resampledData[0] = data[0];
-    resampledData[targetLength - 1] = data[data.length - 1];
-
-    // Resample the audio data
-    for (let i = 1; i < targetLength - 1; i++) {
-        const index = i * springFactor;
-        const leftIndex = Math.floor(index).toFixed();
-        const rightIndex = Math.ceil(index).toFixed();
-        const fraction = index - leftIndex;
-        resampledData[i] = data[leftIndex] + (data[rightIndex] - data[leftIndex]) * fraction;
+        this.disable_start_stop_buttons({ disable_stop: true });
     }
 
-    // Return the resampled data
-    return resampledData;
-}
+    async start() {
+        console.log('start speech-to-text with whisper-live: %s', this.url);
 
-function generateUUID() {
-    let dt = new Date().getTime();
-    const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        const r = (dt + Math.random() * 16) % 16 | 0;
-        dt = Math.floor(dt / 16);
-        return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-    });
-    return uuid;
-}
+        await this.init();
 
-/**
- * Starts recording audio from the captured tab.
- * @param {Object} option - The options object containing the currentTabId.
- */
-async function startRecord(option) {
-    stream = await captureAudio();
-    const uuid = generateUUID();
-    console.log('options', option);
+        this.processor_node.port.start();
 
-    if (stream) {
-        // call when the stream inactive
-        stream.oninactive = () => {
-            // window.close();
-            return;
-        };
+        if (this.gain_value != 1) {
+            this.set_gain_value(this.gain_value);
+        }
 
-        socket = new WebSocket(`ws://${option.host}:${option.port}/`);
-        let language = option.language;
+        console.log('READY');
+    }
 
-        socket.onopen = function (e) {
-            socket.send(
+    stop() {
+        console.log('stop speech-to-text from whisper-live: %s', this.url);
+
+        this.disable_start_stop_buttons({ disable_stop: true });
+
+        if (this.ws) {
+            this.ws.close();
+            this.ws = null;
+        }
+
+        this.server_ready = false;
+
+        if (this.gain_node && this.processor_node) {
+            this.source.disconnect(this.gain_node);
+            this.gain_node.disconnect(this.processor_node);
+            this.processor_node.port.close();
+            this.gain_node = null;
+            this.processor_node = null;
+        }
+
+        if (this.is_microphone && this.source) {
+            console.log('release microphone');
+            this.source.mediaStream.getAudioTracks().forEach((track) => track.stop());
+            this.source = null;
+        }
+
+        console.log('DONE');
+    }
+
+    async init() {
+        if (this.context == null) {
+            this.context = new window.AudioContext({ sampleRate: this.sample_rate });
+            await this.context.audioWorklet.addModule('data-conversion-processor.js');
+        }
+
+        if (this.source == null) {
+            if (this.audio_element) {
+                this.source = this.context.createMediaElementSource(this.audio_element);
+            } else if (this.is_microphone) {
+                this.source = await this.get_microphone_source();
+            }
+        }
+
+        if (this.ws == null) {
+            this.ws = this.init_websocket();
+        }
+
+        if (this.processor_node == null) {
+            this.init_audio();
+        }
+
+        this.segments = [];
+
+        if (this.text_element) {
+            this.text_element.value = '';
+        }
+
+        this.disable_start_stop_buttons({ disable_start: true });
+    }
+
+    set_gain_value(gain_value) {
+        this.gain_value = gain_value;
+
+        if (this.gain_node && this.context) {
+            console.log('set gain value to %d', gain_value);
+            this.gain_node.gain.setValueAtTime(gain_value, this.context.currentTime);
+        }
+    }
+
+    async get_microphone_source() {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                channelCount: 1,
+                sampleRate: 16000,
+            },
+        });
+
+        return this.context.createMediaStreamSource(stream);
+    }
+
+    generate_uuid() {
+        let dt = new Date().getTime();
+        const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = (dt + Math.random() * 16) % 16 | 0;
+            dt = Math.floor(dt / 16);
+            return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+        });
+        return uuid;
+    }
+
+    init_websocket() {
+        const ws = new WebSocket(this.url);
+
+        ws.onopen = () => {
+            ws.send(
                 JSON.stringify({
-                    uid: uuid,
-                    language: option.language,
-                    task: option.task,
-                    use_vad: option.useVad,
+                    uid: this.generate_uuid(),
+                    language: this.language,
+                    task: this.task,
+                    use_vad: false,
                 })
             );
         };
 
-        socket.onmessage = async (event) => {
+        ws.onmessage = async (event) => {
             const data = JSON.parse(event.data);
 
             console.log(data);
 
-            if (data['uid'] !== uuid) {
-                console.error('uid not match');
-                return;
-            }
-
             if (data['status'] === 'WAIT') {
-                await sendMessageToTab(option.currentTabId, {
-                    type: 'showWaitPopup',
-                    data: data['message'],
-                });
-                // chrome.runtime.sendMessage({ action: 'toggleCaptureButtons', data: false });
-                // chrome.runtime.sendMessage({ action: 'stopCapture' });
                 return;
             }
 
-            if (isServerReady === false) {
-                isServerReady = true;
+            if (this.server_ready === false) {
+                this.server_ready = true;
                 return;
             }
 
-            if (language === null) {
-                language = data['language'];
-
-                // send message to popup.js to update dropdown
-                // console.log(language);
-                // chrome.runtime.sendMessage({
-                //     action: 'updateSelectedLanguage',
-                //     detectedLanguage: language,
-                // });
-
+            if (this.language === null) {
+                this.language = data['language'];
                 return;
             }
 
             if (data['message'] === 'DISCONNECT') {
-                // chrome.runtime.sendMessage({ action: 'toggleCaptureButtons', data: false });
                 return;
             }
 
             if (data['message'] === 'SERVER_READY') {
-                // chrome.runtime.sendMessage({ action: 'toggleCaptureButtons', data: false });
                 return;
             }
 
             const segments = data['segments'];
-            console.log(segments);
 
             {
                 const start = Number(segments[0].start);
-                const entries = Object.entries(all_segments).filter((x) => Number(x[0]) < start);
-                all_segments = Object.fromEntries(entries);
+                const entries = Object.entries(this.segments).filter((x) => Number(x[0]) < start);
+                this.segments = Object.fromEntries(entries);
             }
 
             segments.forEach((seg) => {
-                all_segments[seg.start] = seg.text.trim();
+                this.segments[seg.start] = seg.text.trim();
             });
 
-            const entries = Object.entries(all_segments);
+            const entries = Object.entries(this.segments);
             entries.sort((a, b) => Number(a[0]) - Number(b[0]));
 
             const text = entries.map((x) => x[1]).join('\n');
-            console.log(entries);
+            // console.log(entries);
 
-            const textarea = document.getElementById('text');
-            textarea.value = text + '\n';
-            textarea.scrollTop = textarea.scrollHeight;
+            if (this.text_element) {
+                this.text_element.value = text + '\n';
+                this.text_element.scrollTop = this.text_element.scrollHeight;
+            }
         };
 
-        const context = new AudioContext();
-        const mediaStream = context.createMediaStreamSource(stream);
+        return ws;
+    }
 
-        // 256, 512, 1024, 2048, 4096, 8192, 16384
-        // const recorder = context.createScriptProcessor(4096, 1, 1);
-        const recorder = context.createScriptProcessor(16384, 1, 1);
+    async init_audio() {
+        const processor_node = new AudioWorkletNode(this.context, 'data-conversion-processor', {
+            channelCount: 1,
+            numberOfInputs: 1,
+            numberOfOutputs: 1,
+        });
 
-        recorder.onaudioprocess = async (event) => {
-            if (!context || !isServerReady) return;
+        processor_node.port.onmessage = (event) => {
+            if (!this.context || !this.server_ready || !this.ws || this.ws.readyState != WebSocket.OPEN) {
+                return;
+            }
 
-            const inputData = event.inputBuffer.getChannelData(0);
-            const audioData16kHz = resampleTo16kHZ(inputData, context.sampleRate);
-            socket.send(audioData16kHz);
+            this.ws.send(event.data);
         };
 
-        // Prevent page mute
-        mediaStream.connect(recorder);
-        recorder.connect(context.destination);
+        const gain_node = this.context.createGain();
+        gain_node.gain.value = this.gain_value;
 
-        if (is_microphone == false) {
-            mediaStream.connect(context.destination);
+        this.source.connect(gain_node);
+        gain_node.connect(processor_node);
+
+        if (!this.is_microphone) {
+            this.source.connect(this.context.destination);
         }
-    } else {
-        window.close();
+
+        this.processor_node = processor_node;
+        this.gain_node = gain_node;
+    }
+
+    disable_start_stop_buttons({ disable_start = false, disable_stop = false }) {
+        if (this.start_button && this.stop_button) {
+            // this.start_button.disabled = disable_start;
+            // this.stop_button.disabled = disable_stop;
+            this.start_button.style.display = disable_start ? 'none' : 'inline';
+            this.stop_button.style.display = disable_stop ? 'none' : 'inline';
+        }
     }
 }
 
-document.getElementById('start').disabled = false;
-document.getElementById('stop').disabled = true;
-
-function start_record() {
-    console.log('start recording');
-
-    all_segments = {};
-    document.getElementById('text').value = '';
-
-    startRecord({
-        host: host,
-        port: port,
-        language: language,
-        task: task,
-        useVAad: false,
-    });
-
-    document.getElementById('start').disabled = true;
-    document.getElementById('stop').disabled = false;
-    console.log('READY');
-}
-
-function stop_record() {
-    console.log('stop recording');
-
-    isServerReady = false;
-
-    if (socket) {
-        socket.close();
-        socket = null;
-    }
-
-    if (stop_stream_on_close && stream) {
-        console.log('stop audio streaming');
-        stream.getAudioTracks().forEach((track) => track.stop());
-        stream = null;
-    }
-
-    document.getElementById('stop').disabled = true;
-    document.getElementById('start').disabled = false;
-    console.log('DONE');
-}
+export { WhisperLiveClient };
