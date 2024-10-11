@@ -1,6 +1,6 @@
-// const host = 'localhost';
+const host = 'localhost';
 // const host = '127.0.0.1';
-const host = '192.168.10.198';
+// const host = '192.168.10.198';
 const port = '9090';
 
 var language = 'en'; // zh, Malay: ms, Tamil: ta
