@@ -28,13 +28,13 @@ class WhisperLiveClient {
         this.gain_node = null;
 
         if (this.start_button && this.stop_button) {
-            this.start_button.onclick = () => {
+            this.start_button.addEventListener('click', () => {
                 this.start();
-            };
+            });
 
-            this.stop_button.onclick = () => {
+            this.stop_button.addEventListener('click', () => {
                 this.stop();
-            };
+            });
         }
 
         this.disable_start_stop_buttons({ disable_stop: true });
