@@ -245,8 +245,10 @@ class WhisperLiveClient {
 
     disable_start_stop_buttons({ disable_start = false, disable_stop = false }) {
         if (this.start_button && this.stop_button) {
-            this.start_button.disabled = disable_start;
-            this.stop_button.disabled = disable_stop;
+            // this.start_button.disabled = disable_start;
+            // this.stop_button.disabled = disable_stop;
+            this.start_button.style.display = disable_start ? 'none' : 'inline';
+            this.stop_button.style.display = disable_stop ? 'none' : 'inline';
         }
     }
 }
