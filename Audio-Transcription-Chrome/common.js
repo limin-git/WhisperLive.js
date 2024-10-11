@@ -43,14 +43,6 @@ class WhisperLiveClient {
     async start() {
         console.log('start speech-to-text with whisper-live: %s', this.url);
 
-        this.segments = [];
-
-        if (this.text_element) {
-            this.text_element.value = '';
-        }
-
-        this.disable_start_stop_buttons({ disable_start: true });
-
         await this.init();
 
         this.processor_node.port.start();
@@ -110,6 +102,14 @@ class WhisperLiveClient {
         if (this.processor_node == null) {
             this.init_audio();
         }
+
+        this.segments = [];
+
+        if (this.text_element) {
+            this.text_element.value = '';
+        }
+
+        this.disable_start_stop_buttons({ disable_start: true });
     }
 
     set_gain_value(gain_value) {
