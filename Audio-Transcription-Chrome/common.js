@@ -1,10 +1,14 @@
 // const host = 'localhost';
 // const host = '127.0.0.1';
-const host = '192.168.10.198';
+// const host = '192.168.10.198';
+// const host = '192.168.10.233';
+const host = '192.168.11.74';
 const port = '9090';
 
 var language = 'en'; // zh, Malay: ms, Tamil: ta
 var task = 'transcribe'; // transcribe, translate
+
+var media_element = null;
 
 var socket = null;
 var stream = null;
@@ -12,6 +16,16 @@ var isServerReady = false;
 var all_segments = {};
 var stop_stream_on_close = true;
 var is_microphone = false;
+
+async function stop_media() {
+    media_element.pause();
+    media_element.currentTime = 0;
+}
+
+async function play_media() {
+    media_element.muted = false;
+    media_element.play();
+}
 
 /**
  * Resamples the audio data to a target sample rate of 16kHz.
@@ -189,7 +203,7 @@ async function startRecord(option) {
 document.getElementById('start').disabled = false;
 document.getElementById('stop').disabled = true;
 
-function start_record() {
+async function start_record() {
     console.log('start recording');
 
     all_segments = {};
@@ -208,8 +222,10 @@ function start_record() {
     console.log('READY');
 }
 
-function stop_record() {
+async function stop_record() {
     console.log('stop recording');
+
+    stop_media();
 
     isServerReady = false;
 
