@@ -1,13 +1,13 @@
-// const url = '127.0.0.1:9090';
-const url = '192.168.10.198';
-// const url = '192.168.10.233:9090';
-// const url = '192.168.11.74:9090';
+// const default_url = 'ws://127.0.0.1:9090';
+// const default_url = 'ws://192.168.10.198:9090';
+// const default_url = 'ws://192.168.10.233:9090';
+const default_url = 'ws://192.168.11.74:9090';
 
-var language = 'en'; // zh, Malay: ms, Tamil: ta
-var task = 'transcribe'; // transcribe, translate
+const default_language = 'zh'; // zh, Malay: ms, Tamil: ta
+const default_task = 'transcribe'; // transcribe, translate
 
 class WhisperLiveClient {
-    constructor({ url = 'ws://127.0.0.1:9090', language = 'zh', task = 'transcribe', gain_value = 1, is_microphone = false, start_button = null, stop_button = null, text_element = null, audio_element = null, sample_rate = 16000 }) {
+    constructor({ url = default_url, language = default_language, task = default_task, gain_value = 1, is_microphone = false, start_button = null, stop_button = null, text_element = null, audio_element = null, sample_rate = 16000 }) {
         this.url = url;
         this.language = language;
         this.task = task;
@@ -47,7 +47,9 @@ class WhisperLiveClient {
 
         this.processor_node.port.start();
 
-        this.set_gain_value(this.gain_value);
+        if (this.gain_value != 1) {
+            this.set_gain_value(this.gain_value);
+        }
 
         console.log('READY');
     }
@@ -115,7 +117,8 @@ class WhisperLiveClient {
     set_gain_value(gain_value) {
         this.gain_value = gain_value;
 
-        if (this.gain_node) {
+        if (this.gain_node && this.context) {
+            console.log('set gain value to %d', gain_value);
             this.gain_node.gain.setValueAtTime(gain_value, this.context.currentTime);
         }
     }
