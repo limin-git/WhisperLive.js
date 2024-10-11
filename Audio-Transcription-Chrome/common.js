@@ -1,232 +1,251 @@
-// const host = 'localhost';
-const host = '127.0.0.1';
-// const host = '192.168.10.198';
-// const host = '192.168.10.233';
-// const host = '192.168.11.74';
-const port = '9090';
+// const url = '127.0.0.1:9090';
+const url = '192.168.10.198';
+// const url = '192.168.10.233:9090';
+// const url = '192.168.11.74:9090';
 
 var language = 'en'; // zh, Malay: ms, Tamil: ta
 var task = 'transcribe'; // transcribe, translate
 
-var media_element = null;
-var media_source = null;
+class WhisperLiveClient {
+    constructor({ url = 'ws://127.0.0.1:9090', language = 'zh', task = 'transcribe', gain_value = 1, is_microphone = false, start_button = null, stop_button = null, text_element = null, audio_element = null, sample_rate = 16000 }) {
+        this.url = url;
+        this.language = language;
+        this.task = task;
+        this.is_microphone = is_microphone;
+        this.sample_rate = sample_rate;
+        this.audio_element = audio_element;
+        this.gain_value = gain_value;
+        this.text_element = text_element;
+        this.start_button = start_button;
+        this.stop_button = stop_button;
 
-var socket = null;
-var source = null;
-var gain = null;
-var processor = null;
-var isServerReady = false;
-var all_segments = {};
-var stop_stream_on_close = true;
-var is_microphone = false;
+        this.server_ready = false;
+        this.context = null;
+        this.segments = [];
+        this.source = null;
+        this.ws = null;
+        this.processor_node = null;
+        this.gain_node = null;
 
-const context = new window.AudioContext({ sampleRate: 16000 });
+        if (this.start_button && this.stop_button) {
+            this.start_button.onclick = () => {
+                this.start();
+            };
 
-function generateUUID() {
-    let dt = new Date().getTime();
-    const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        const r = (dt + Math.random() * 16) % 16 | 0;
-        dt = Math.floor(dt / 16);
-        return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-    });
-    return uuid;
-}
-
-async function getAudioSource() {
-    media_element = document.getElementById('audioElement');
-
-    if (media_element) {
-        stop_stream_on_close = false;
-
-        if (media_source == null) {
-            media_source = context.createMediaElementSource(media_element);
+            this.stop_button.onclick = () => {
+                this.stop();
+            };
         }
 
-        return media_source;
+        this.disable_start_stop_buttons({ disable_stop: true });
     }
 
-    is_microphone = true;
+    async start() {
+        console.log('start speech-to-text with whisper-live: %s', this.url);
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            channelCount: 1,
-            sampleRate: 16000,
-        },
-    });
+        this.segments = [];
 
-    return context.createMediaStreamSource(stream);
-}
+        if (this.text_element) {
+            this.text_element.value = '';
+        }
 
-/**
- * Starts recording audio from the captured tab.
- * @param {Object} option - The options object containing the currentTabId.
- */
-async function startRecord(option) {
-    source = await getAudioSource();
+        this.disable_start_stop_buttons({ disable_start: true });
 
-    if (!source) {
-        window.close();
-        return;
+        await this.init();
+
+        this.processor_node.port.start();
+
+        this.set_gain_value(this.gain_value);
+
+        console.log('READY');
     }
 
-    console.log('options', option);
-    console.log(source);
+    stop() {
+        console.log('stop speech-to-text from whisper-live: %s', this.url);
 
-    // call when the stream inactive
-    source.oninactive = () => {
-        window.close();
-        return;
-    };
+        this.disable_start_stop_buttons({ disable_stop: true });
 
-    socket = new WebSocket(`ws://${option.host}:${option.port}/`);
-    let language = option.language;
-
-    socket.onopen = function (e) {
-        socket.send(
-            JSON.stringify({
-                uid: generateUUID(),
-                language: option.language,
-                task: option.task,
-                use_vad: option.useVad,
-            })
-        );
-    };
-
-    socket.onmessage = async (event) => {
-        const data = JSON.parse(event.data);
-
-        console.log(data);
-
-        if (data['status'] === 'WAIT') {
-            await sendMessageToTab(option.currentTabId, {
-                type: 'showWaitPopup',
-                data: data['message'],
-            });
-            return;
+        if (this.ws) {
+            this.ws.close();
+            this.ws = null;
         }
 
-        if (isServerReady === false) {
-            isServerReady = true;
-            return;
+        this.server_ready = false;
+
+        if (this.gain_node && this.processor_node) {
+            this.source.disconnect(this.gain_node);
+            this.gain_node.disconnect(this.processor_node);
+            this.processor_node.port.close();
+            this.gain_node = null;
+            this.processor_node = null;
         }
 
-        if (language === null) {
-            language = data['language'];
-            return;
+        if (this.is_microphone && this.source) {
+            console.log('release microphone');
+            this.source.mediaStream.getAudioTracks().forEach((track) => track.stop());
+            this.source = null;
         }
 
-        if (data['message'] === 'DISCONNECT') {
-            return;
+        console.log('DONE');
+    }
+
+    async init() {
+        if (this.context == null) {
+            this.context = new window.AudioContext({ sampleRate: this.sample_rate });
+            await this.context.audioWorklet.addModule('data-conversion-processor.js');
         }
 
-        if (data['message'] === 'SERVER_READY') {
-            return;
+        if (this.source == null) {
+            if (this.audio_element) {
+                this.source = this.context.createMediaElementSource(this.audio_element);
+            } else if (this.is_microphone) {
+                this.source = await this.get_microphone_source();
+            }
         }
 
-        const segments = data['segments'];
-        console.log(segments);
-
-        {
-            const start = Number(segments[0].start);
-            const entries = Object.entries(all_segments).filter((x) => Number(x[0]) < start);
-            all_segments = Object.fromEntries(entries);
+        if (this.ws == null) {
+            this.ws = this.init_websocket();
         }
 
-        segments.forEach((seg) => {
-            all_segments[seg.start] = seg.text.trim();
+        if (this.processor_node == null) {
+            this.init_audio();
+        }
+    }
+
+    set_gain_value(gain_value) {
+        this.gain_value = gain_value;
+
+        if (this.gain_node) {
+            this.gain_node.gain.setValueAtTime(gain_value, this.context.currentTime);
+        }
+    }
+
+    async get_microphone_source() {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                channelCount: 1,
+                sampleRate: 16000,
+            },
         });
 
-        const entries = Object.entries(all_segments);
-        entries.sort((a, b) => Number(a[0]) - Number(b[0]));
+        return this.context.createMediaStreamSource(stream);
+    }
 
-        const text = entries.map((x) => x[1]).join('\n');
-        console.log(entries);
+    generate_uuid() {
+        let dt = new Date().getTime();
+        const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = (dt + Math.random() * 16) % 16 | 0;
+            dt = Math.floor(dt / 16);
+            return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+        });
+        return uuid;
+    }
 
-        const textarea = document.getElementById('text');
-        textarea.value = text + '\n';
-        textarea.scrollTop = textarea.scrollHeight;
-    };
+    init_websocket() {
+        const ws = new WebSocket(this.url);
 
-    await context.audioWorklet.addModule('data-conversion-processor.js');
+        ws.onopen = () => {
+            ws.send(
+                JSON.stringify({
+                    uid: this.generate_uuid(),
+                    language: this.language,
+                    task: this.task,
+                    use_vad: false,
+                })
+            );
+        };
 
-    processor = new AudioWorkletNode(context, 'data-conversion-processor', {
-        channelCount: 1,
-        numberOfInputs: 1,
-        numberOfOutputs: 1,
-    });
+        ws.onmessage = async (event) => {
+            const data = JSON.parse(event.data);
 
-    processor.port.onmessage = (event) => {
-        if (!context || !isServerReady || !socket || socket.readyState != WebSocket.OPEN) {
-            return;
+            console.log(data);
+
+            if (data['status'] === 'WAIT') {
+                return;
+            }
+
+            if (this.server_ready === false) {
+                this.server_ready = true;
+                return;
+            }
+
+            if (this.language === null) {
+                this.language = data['language'];
+                return;
+            }
+
+            if (data['message'] === 'DISCONNECT') {
+                return;
+            }
+
+            if (data['message'] === 'SERVER_READY') {
+                return;
+            }
+
+            const segments = data['segments'];
+
+            {
+                const start = Number(segments[0].start);
+                const entries = Object.entries(this.segments).filter((x) => Number(x[0]) < start);
+                this.segments = Object.fromEntries(entries);
+            }
+
+            segments.forEach((seg) => {
+                this.segments[seg.start] = seg.text.trim();
+            });
+
+            const entries = Object.entries(this.segments);
+            entries.sort((a, b) => Number(a[0]) - Number(b[0]));
+
+            const text = entries.map((x) => x[1]).join('\n');
+            // console.log(entries);
+
+            if (this.text_element) {
+                this.text_element.value = text + '\n';
+                this.text_element.scrollTop = this.text_element.scrollHeight;
+            }
+        };
+
+        return ws;
+    }
+
+    async init_audio() {
+        const processor_node = new AudioWorkletNode(this.context, 'data-conversion-processor', {
+            channelCount: 1,
+            numberOfInputs: 1,
+            numberOfOutputs: 1,
+        });
+
+        processor_node.port.onmessage = (event) => {
+            if (!this.context || !this.server_ready || !this.ws || this.ws.readyState != WebSocket.OPEN) {
+                return;
+            }
+
+            this.ws.send(event.data);
+        };
+
+        const gain_node = this.context.createGain();
+        gain_node.gain.value = this.gain_value;
+
+        this.source.connect(gain_node);
+        gain_node.connect(processor_node);
+
+        if (!this.is_microphone) {
+            this.source.connect(this.context.destination);
         }
 
-        socket.send(event.data);
-    };
+        this.processor_node = processor_node;
+        this.gain_node = gain_node;
+    }
 
-    processor.port.start();
-
-    gain = context.createGain();
-    gain.gain.value = 10;
-
-    source.connect(gain);
-    gain.connect(processor);
-
-    if (!is_microphone) {
-        source.connect(context.destination);
+    disable_start_stop_buttons({ disable_start = false, disable_stop = false }) {
+        if (this.start_button && this.stop_button) {
+            this.start_button.disabled = disable_start;
+            this.stop_button.disabled = disable_stop;
+        }
     }
 }
 
-document.getElementById('start').disabled = false;
-document.getElementById('stop').disabled = true;
-
-async function start_record() {
-    console.log('start recording');
-
-    all_segments = {};
-    document.getElementById('text').value = '';
-
-    startRecord({
-        host: host,
-        port: port,
-        language: language,
-        task: task,
-        useVAad: false,
-    });
-
-    document.getElementById('start').disabled = true;
-    document.getElementById('stop').disabled = false;
-    console.log('READY');
-}
-
-async function stop_record() {
-    console.log('stop recording');
-
-    isServerReady = false;
-
-    if (socket) {
-        socket.close();
-        socket = null;
-    }
-
-    if (is_microphone && source) {
-        console.log('release microphone');
-        source.mediaStream.getAudioTracks().forEach((track) => track.stop());
-    }
-
-    source.disconnect(gain);
-    gain.disconnect(processor);
-
-    if (!is_microphone) {
-        source.disconnect(context.destination);
-    }
-
-    source = null;
-    gain = null;
-    processor = null;
-
-    document.getElementById('stop').disabled = true;
-    document.getElementById('start').disabled = false;
-    console.log('DONE');
-}
+export { WhisperLiveClient };
