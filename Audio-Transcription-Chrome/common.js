@@ -1,7 +1,7 @@
-// const default_url = 'ws://127.0.0.1:9090';
+const default_url = 'ws://127.0.0.1:9090';
 // const default_url = 'ws://192.168.10.198:9090';
 // const default_url = 'ws://192.168.10.233:9090';
-const default_url = 'ws://192.168.11.74:9090';
+// const default_url = 'ws://192.168.11.74:9090';
 
 const default_language = 'zh'; // zh, Malay: ms, Tamil: ta
 const default_task = 'transcribe'; // transcribe, translate
