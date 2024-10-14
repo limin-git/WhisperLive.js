@@ -16,8 +16,7 @@
     <div>
       <button id="start">Start</button>
       <button id="stop">Stop</button>
-      <br>
-      <br>
+      <br><br>
     </div>
   </center>
 
@@ -64,6 +63,7 @@
 
     const record = wavesurfer.registerPlugin(RecordPlugin.create({
       scrollingWaveform: true,
+      scrollingWaveformWindow: 10,
     }));
 
     record.on('record-end', (blob) => {
