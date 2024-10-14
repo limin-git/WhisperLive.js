@@ -7,7 +7,7 @@ const default_language = 'zh'; // zh, Malay: ms, Tamil: ta
 const default_task = 'transcribe'; // transcribe, translate
 
 class WhisperLiveClient {
-    constructor({ url = default_url, language = default_language, task = default_task, gain_value = 1, is_microphone = false, start_button = null, stop_button = null, text_element = null, audio_element = null, sample_rate = 16000 }) {
+    constructor({ url = default_url, language = default_language, task = default_task, gain_value = 1, is_microphone = false, start_button = null, stop_button = null, text_element = null, audio_element = null, sample_rate = 48000 }) {
         this.url = url;
         this.language = language;
         this.task = task;
@@ -37,7 +37,7 @@ class WhisperLiveClient {
             });
         }
 
-        this.disable_start_stop_buttons({ disable_stop: true });
+        this.set_start_stop_buttons({ disable_stop: true });
     }
 
     async start() {
@@ -57,7 +57,7 @@ class WhisperLiveClient {
     stop() {
         console.log('stop speech-to-text from whisper-live: %s', this.url);
 
-        this.disable_start_stop_buttons({ disable_stop: true });
+        this.set_start_stop_buttons({ disable_stop: true });
 
         if (this.ws) {
             this.ws.close();
@@ -111,7 +111,7 @@ class WhisperLiveClient {
             this.text_element.value = '';
         }
 
-        this.disable_start_stop_buttons({ disable_start: true });
+        this.set_start_stop_buttons({ disable_start: true });
     }
 
     set_gain_value(gain_value) {
@@ -243,10 +243,8 @@ class WhisperLiveClient {
         this.gain_node = gain_node;
     }
 
-    disable_start_stop_buttons({ disable_start = false, disable_stop = false }) {
+    set_start_stop_buttons({ disable_start = false, disable_stop = false }) {
         if (this.start_button && this.stop_button) {
-            // this.start_button.disabled = disable_start;
-            // this.stop_button.disabled = disable_stop;
             this.start_button.style.display = disable_start ? 'none' : 'inline';
             this.stop_button.style.display = disable_stop ? 'none' : 'inline';
         }
