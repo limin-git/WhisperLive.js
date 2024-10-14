@@ -5,9 +5,10 @@ const default_url = 'ws://192.168.11.74:9090';
 
 const default_language = 'zh'; // zh, Malay: ms, Tamil: ta
 const default_task = 'transcribe'; // transcribe, translate
+const default_sample_rate = 48000;
 
 class WhisperLiveClient {
-    constructor({ url = default_url, language = default_language, task = default_task, gain_value = 1, is_microphone = false, start_button = null, stop_button = null, text_element = null, audio_element = null, sample_rate = 48000 }) {
+    constructor({ url = default_url, language = default_language, task = default_task, gain_value = 1, is_microphone = false, start_button = null, stop_button = null, text_element = null, audio_element = null, sample_rate = default_sample_rate }) {
         this.url = url;
         this.language = language;
         this.task = task;
@@ -203,7 +204,6 @@ class WhisperLiveClient {
             entries.sort((a, b) => Number(a[0]) - Number(b[0]));
 
             const text = entries.map((x) => x[1]).join('\n');
-            // console.log(entries);
 
             if (this.text_element) {
                 this.text_element.value = text + '\n';
@@ -219,6 +219,7 @@ class WhisperLiveClient {
             channelCount: 1,
             numberOfInputs: 1,
             numberOfOutputs: 1,
+            processorOptions: { sampleRate: this.sample_rate },
         });
 
         processor_node.port.onmessage = (event) => {

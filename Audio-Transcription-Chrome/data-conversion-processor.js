@@ -1,20 +1,15 @@
 class DataConversionAudioProcessor extends AudioWorkletProcessor {
     constructor(options) {
         super(options);
-        this.buffer = [];
+        console.log(options);
+        this.origin_sample_rate = options['processorOptions']['sampleRate'] ?? 48000;
     }
 
-    // 处理音频数据的方法，每次处理 128 个音频帧
     process(inputs, outputs, parameters) {
         const input = inputs[0];
         if (input.length > 0) {
             const int16Array = this.convertFloat32ToInt16(input[0]);
-            this.buffer.push(...int16Array);
-
-            if (this.buffer.length > 4096) {
-                this.port.postMessage(this.resampleTo16kHZ(this.buffer));
-                this.buffer = [];
-            }
+            this.port.postMessage(this.resampleTo16kHZ(int16Array, this.origin_sample_rate));
         }
         return true;
     }
