@@ -6,7 +6,7 @@ class DataConversionAudioProcessor extends AudioWorkletProcessor {
     process(inputs, outputs, parameters) {
         const input = inputs[0];
         if (input.length > 0) {
-            this.port.postMessage(this.resampleTo16kHZ(input[0], this.origin_sample_rate));
+            this.port.postMessage(this.resampleTo16kHZ(input[0]));
         }
         return true;
     }
