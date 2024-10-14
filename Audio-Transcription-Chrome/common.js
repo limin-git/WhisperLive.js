@@ -5,7 +5,7 @@ const default_url = 'ws://192.168.11.74:9090';
 
 const default_language = 'zh'; // zh, Malay: ms, Tamil: ta
 const default_task = 'transcribe'; // transcribe, translate
-const default_sample_rate = 48000;
+const default_sample_rate = 16000;
 
 class WhisperLiveClient {
     constructor({ url = default_url, language = default_language, task = default_task, gain_value = 1, is_microphone = false, start_button = null, stop_button = null, text_element = null, audio_element = null, sample_rate = default_sample_rate }) {
