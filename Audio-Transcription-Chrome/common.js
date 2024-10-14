@@ -130,7 +130,7 @@ class WhisperLiveClient {
                 echoCancellation: true,
                 noiseSuppression: true,
                 channelCount: 1,
-                sampleRate: 16000,
+                sampleRate: this.sample_rate,
             },
         });
 
@@ -219,7 +219,6 @@ class WhisperLiveClient {
             channelCount: 1,
             numberOfInputs: 1,
             numberOfOutputs: 1,
-            processorOptions: { sampleRate: this.sample_rate },
         });
 
         processor_node.port.onmessage = (event) => {

@@ -1,37 +1,29 @@
 class DataConversionAudioProcessor extends AudioWorkletProcessor {
     constructor(options) {
         super(options);
-        console.log(options);
-        this.origin_sample_rate = options['processorOptions']['sampleRate'] ?? 48000;
     }
 
     process(inputs, outputs, parameters) {
         const input = inputs[0];
         if (input.length > 0) {
-            const int16Array = this.convertFloat32ToInt16(input[0]);
-            this.port.postMessage(this.resampleTo16kHZ(int16Array, this.origin_sample_rate));
+            this.port.postMessage(this.resampleTo16kHZ(input[0], this.origin_sample_rate));
         }
         return true;
-    }
-
-    convertFloat32ToInt16(buffer) {
-        const l = buffer.length;
-        const int16Array = new Int16Array(l);
-        for (let i = 0; i < l; i++) {
-            int16Array[i] = Math.min(1, buffer[i]) * 0x7fff;
-        }
-        return int16Array;
     }
 
     /**
      * Resamples the audio data to a target sample rate of 16kHz.
      * @param {Array|ArrayBuffer|TypedArray} audioData - The input audio data.
-     * @param {number} [origSampleRate=44100] - The original sample rate of the audio data.
+     * @param {number} [origSampleRate=48000] - The original sample rate of the audio data.
      * @returns {Float32Array} The resampled audio data at 16kHz.
      */
     resampleTo16kHZ(audioData, origSampleRate = 48000) {
         // Convert the audio data to a Float32Array
         const data = new Float32Array(audioData);
+
+        if (16000 == origSampleRate) {
+            return data;
+        }
 
         // Calculate the desired length of the resampled data
         const targetLength = Math.round(data.length * (16000 / origSampleRate));
