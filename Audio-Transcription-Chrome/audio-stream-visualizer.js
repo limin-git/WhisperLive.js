@@ -1,9 +1,10 @@
 class AudioStreamVisualizer {
-    constructor({ canvas_element = null, gain_button = null, gain_value = 1, fft_size = 32768 }) {
+    constructor({ canvas_element = null, gain_button = null, gain_value = 1, fft_size = 32768, is_microphone = false }) {
         this.canvas_element = canvas_element;
         this.gain_button = gain_button;
         this.gain_value = gain_value;
         this.fft_size = fft_size;
+        this.is_microphone = is_microphone;
 
         if (this.gain_button) {
             this.gain_value = gain_button.value;
@@ -59,6 +60,11 @@ class AudioStreamVisualizer {
     stop() {
         if (this.source) {
             this.source.disconnect(this.gain_node);
+
+            if (this.is_microphone) {
+                this.source.mediaStream.getAudioTracks().forEach((track) => track.stop());
+            }
+
             this.source = null;
         }
 
