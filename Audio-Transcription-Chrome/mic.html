@@ -22,16 +22,21 @@
 
   <div>
     <br>
-    <label style="float:left">音量增益：</label> <input id="gain" type="number" min="0" max="1000" value="1"></input>
+    <label style="float:left">音量增益：</label> <input id="gain" type="number" min="0" max="1000" value="1" step="1"></input>
+    <br>
+    <br>
+    <canvas id="canvas"></canvas>
   </div>
 
   <script type="module">
     import { WhisperLiveClient } from "./common.js";
+    import { AudioStreamVisualizer } from "./audio-stream-visualizer.js";
 
     const text_element = document.getElementById('text');
     const start_button = document.getElementById('start');
     const stop_button = document.getElementById('stop');
     const gain_button = document.getElementById('gain');
+    const canvas_element = document.getElementById('canvas');
 
     const client = new WhisperLiveClient({
       is_microphone: true,
@@ -40,8 +45,29 @@
       stop_button: stop_button,
     });
 
+    const visualizer = new AudioStreamVisualizer({
+      canvas_element: canvas_element,
+      gain_button: gain_button,
+    });
+
     gain_button.addEventListener('input', (event) => {
       client.set_gain_value(gain_button.value);
+    });
+
+    start_button.addEventListener('click', async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          channelCount: 1,
+          sampleRate: 16000,
+        },
+      });
+      visualizer.start(stream);
+    });
+
+    stop_button.addEventListener('click', () => {
+      visualizer.stop();
     });
   </script>
 
